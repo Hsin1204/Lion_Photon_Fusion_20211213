@@ -17,13 +17,22 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     public NetworkPrefabRef go_Player;
 
     [Header("生成位置")]
-    public Transform spawnPoint;
+    public Transform[] spawnPoints;
     [Header("主畫面UI")]
     public GameObject ui_Main;
+    [Header("版本文字")]
+    public Text txt_Version;
+
     private string input_RoomName;
     private NetworkRunner runner;
+    private string version = "Hsin Copyright 2022.| Version  ";
+    private Dictionary<PlayerRef, NetworkObject> players = new Dictionary<PlayerRef, NetworkObject>();
     #endregion
 
+    private void Awake()
+    {
+        txt_Version.text = version + Application.version;
+    }
     #region 方法
     /// <summary>
     /// 按鈕點擊呼叫 : 創建房間
@@ -97,9 +106,33 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
         
     }
 
+    /// <summary>
+    /// 玩家連線輸入行為
+    /// </summary>
+    /// <param name="runner"></param>
+    /// <param name="input"></param>
     public void OnInput(NetworkRunner runner, NetworkInput input)
     {
-        
+        NetworkInputData inputData = new NetworkInputData();
+
+        #region 客製化輸入
+        if (Input.GetKey(KeyCode.W)) inputData.direction += Vector3.forward;
+        if (Input.GetKey(KeyCode.D)) inputData.direction += Vector3.right;
+        if (Input.GetKey(KeyCode.S)) inputData.direction += Vector3.back;
+        if (Input.GetKey(KeyCode.A)) inputData.direction += Vector3.left;
+
+        inputData.isFire = Input.GetKeyDown(KeyCode.Mouse0);
+        #endregion
+
+        #region 滑鼠座標處理
+        inputData.cursorPosition = Input.mousePosition;
+        inputData.cursorPosition.z = 60;
+
+        Vector3 cursorToWorld = Camera.main.ScreenToWorldPoint(inputData.cursorPosition);
+        inputData.cursorPosition = cursorToWorld;
+        #endregion
+        //輸入資訊.設定(連線輸入資料)
+        input.Set(inputData);
     }
 
     public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input)
@@ -114,12 +147,26 @@ public class BasicSpawner : MonoBehaviour, INetworkRunnerCallbacks
     /// <param name="player"></param>
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
-        runner.Spawn(go_Player, spawnPoint.position, Quaternion.identity, player);
+        int randomIndex = UnityEngine.Random.Range(0, spawnPoints.Length + 1);
+        //連線執行器.生成(物件,座標,角度,玩家資訊)
+        NetworkObject playerObj = runner.Spawn(go_Player, spawnPoints[randomIndex].position, Quaternion.identity, player);
+
+        players.Add(player, playerObj);
+
     }
 
+    /// <summary>
+    /// 當玩家退出房間後
+    /// </summary>
+    /// <param name="runner"></param>
+    /// <param name="player"></param>
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
-        
+       if(players.TryGetValue(player,out NetworkObject playeretworkObject))
+        {
+            runner.Despawn(playeretworkObject);
+            players.Remove(player);
+        }
     }
 
     public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ArraySegment<byte> data)
